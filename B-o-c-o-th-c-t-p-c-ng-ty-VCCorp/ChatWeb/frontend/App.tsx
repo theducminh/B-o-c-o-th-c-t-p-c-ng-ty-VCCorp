@@ -10,7 +10,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
-  console.log('🟢 App rendered. userId:', userId);
+  console.log(' App rendered. userId:', userId);
 
   return (
     <NavigationContainer>

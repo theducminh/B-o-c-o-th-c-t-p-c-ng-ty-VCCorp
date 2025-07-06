@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { use, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,14 @@ export default function ChatScreen({ route, userId }: ChatScreenProps) {
   const { room } = route.params;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const flatListRef = useRef<FlatList>(null);
+
+
+  useEffect(() => {
+  if (flatListRef.current && messages.length > 0) {
+    flatListRef.current.scrollToEnd({ animated: true });
+  }
+}, [messages]);
 
   useEffect(() => {
     socket.emit('register', userId);
@@ -54,6 +62,7 @@ export default function ChatScreen({ route, userId }: ChatScreenProps) {
       keyboardVerticalOffset={90}
     >
       <FlatList
+        ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item._id}
         contentContainerStyle={{ padding: 16, paddingBottom: 80 }}

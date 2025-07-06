@@ -16,7 +16,7 @@ export default function LoginScreen({ navigation, setUserId }: any) {
 
   // Assuming the API returns a list of users
   if (!Array.isArray(res.data)) {
-  console.log('🚨 Dữ liệu trả về không phải mảng:', res.data);
+  console.log(' Dữ liệu trả về không phải mảng:', res.data);
   alert('Lỗi backend hoặc CORS. Kiểm tra console!');
   return;
 }

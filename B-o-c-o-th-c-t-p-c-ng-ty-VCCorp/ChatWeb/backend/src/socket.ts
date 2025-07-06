@@ -56,7 +56,7 @@ export function initSocket(io: Server) {
 
       // Kiểm tra kỹ user.userID và user.username
       if (!user.userID || !user.username) {
-        console.error('❌ User thiếu thông tin userID hoặc username');
+        console.error(' User thiếu thông tin userID hoặc username');
         return;
       }
 
@@ -71,7 +71,7 @@ export function initSocket(io: Server) {
 
       io.to(roomId).emit('receiveMessage', message);
     } catch (err) {
-      console.error('❌ sendMessage error:', err);
+      console.error(' sendMessage error:', err);
     }
   });
 
@@ -84,7 +84,7 @@ export function initSocket(io: Server) {
       $addToSet: { seenBy: userId }
     });
   } catch (err) {
-    console.error('❌ seenMessage error:', err);
+    console.error(' seenMessage error:', err);
   }
 });
     socket.on('typing', ({ roomId, userId }) => {

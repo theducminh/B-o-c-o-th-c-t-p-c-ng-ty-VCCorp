@@ -9,7 +9,7 @@ export default function RoomListScreen({ navigation, userId }: any) {
 
   useEffect(() => {
     if (!userId) {
-      alert('❗ Không có userId, quay lại màn hình Login');
+      alert(' Không có userId, quay lại màn hình Login');
       navigation.replace('Login');
       return;
     }
@@ -22,7 +22,7 @@ export default function RoomListScreen({ navigation, userId }: any) {
         setRooms(res.data);
       })
       .catch((err) => {
-        console.error('❌ Fetch rooms error:', err);
+        console.error(' Fetch rooms error:', err);
         alert( 'Không thể tải danh sách phòng');
       })
       .finally(() => {
