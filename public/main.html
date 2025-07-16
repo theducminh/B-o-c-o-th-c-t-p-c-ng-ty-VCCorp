@@ -14,6 +14,8 @@
   <script src="script4.js" defer></script>
   <script src="script5.js" defer></script>
   <script src="script6.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 
 </head>
 
@@ -56,6 +58,9 @@
         </li>
         <li class="hover:bg-blue-600 py-3 text-center cursor-pointer" onclick="showTab('customers')">
           Quản lý khách hàng
+        </li>
+        <li class="hover:bg-blue-600 py-3 text-center cursor-pointer" onclick="showTab('DataVisualization')">
+          Trực quan dữ liệu
         </li>
       </ul>
       <div class="bg-red-500 text-white text-center py-4">
@@ -543,6 +548,24 @@
           </button>
         </div>
     </div>
+
+    <!-- Trực quan hóa dữ liệu -->
+<div id="DataVisualization" class="tab-pane hidden">
+  <h2 class="text-2xl font-bold mb-4">Trực quan dữ liệu từ ngôn ngữ tự nhiên</h2>
+
+  <div class="bg-gray-100 p-4 rounded shadow">
+    <input id="nlpQuery" type="text" class="w-full p-2 border rounded mb-4"
+      placeholder="Ví dụ: Doanh thu theo tháng, sản phẩm bán chạy nhất">
+
+    <button onclick="analyzeQuery()"
+      class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Phân tích</button>
+
+    <div class="mt-6">
+      <canvas id="nlpChart" class="w-full h-auto"></canvas>
+    </div>
+  </div>
+</div>
+
 
     <!--Chi tiết đơn hàng-->
     <div id="orderDetails" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-40">

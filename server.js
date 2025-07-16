@@ -8,6 +8,7 @@ const suppliersRoutes = require('./routes/suppliers');
 const customersRoutes = require('./routes/customers');
 const ordersRoutes = require('./routes/orders');
 const orderdetailRoutes = require('./routes/orderdetails');
+const nlp = require('./routes/nlp');
 
 
 const app = express();
@@ -63,6 +64,7 @@ app.use('/suppliers', suppliersRoutes);
 app.use('/customers', customersRoutes);
 app.use('/orders', ordersRoutes);
 app.use('/orderdetails', orderdetailRoutes);
+app.use('/api/nlp', nlp);
 //Starting server
 
 app.listen(port, () => {
