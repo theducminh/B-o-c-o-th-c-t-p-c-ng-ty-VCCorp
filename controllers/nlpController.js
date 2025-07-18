@@ -1,11 +1,9 @@
 const sql = require('mssql');
 
-// Chuẩn hóa tiếng Việt không dấu
 function normalizeVN(str) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-// Danh sách luật rule-based NLP
 const ruleBasedQueries = [
 
   // 1. Doanh thu theo từng tháng trong năm
@@ -115,7 +113,6 @@ const ruleBasedQueries = [
 
 ];
 
-//  Hàm chính xử lý câu hỏi NLP
 exports.handleQuery = async (req, res) => {
   const { question } = req.body;
   const pool = req.pool;
@@ -140,7 +137,6 @@ exports.handleQuery = async (req, res) => {
       console.log('Matched pattern:', rule.pattern);
       matched = rule;
 
-      // Xử lý extract
       if (rule.extract) {
         extractData = rule.extract(match);
         console.log('Extracted:', extractData);
