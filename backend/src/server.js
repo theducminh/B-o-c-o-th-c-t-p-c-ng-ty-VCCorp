@@ -3,10 +3,12 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 import tasksRoute from './routes/tasks.js';
 import eventsRoute from './routes/events.js';
 import authRoute from './routes/auth.js';
 import googleSyncRoute from './routes/googleSync.js';
+
 import { getPool, healthCheck } from './db.js';
 import { processPendingNotifications } from './jobs/retryNotifications.js';
 import { fetchAndSyncCalendar } from './services/calendarService.js';
@@ -34,17 +36,21 @@ app.get('/health', async (req, res) => {
   res.status(ok ? 200 : 500).json({ status: ok ? 'ok' : 'error' });
 });
 
-// Background Jobs
+// Background Jobs với cron
 function startJobs() {
-  // Notification retry job mỗi 1 phút
-  setInterval(() => {
-    processPendingNotifications().catch(e =>
-      console.error('[Job] Notification retry error:', e)
-    );
-  }, 60 * 1000);
+  // Retry Notifications mỗi phút
+  cron.schedule('* * * * *', async () => {
+    console.log('[Job] Running notification retry...');
+    try {
+      await processPendingNotifications();
+    } catch (e) {
+      console.error('[Job] Notification retry error:', e);
+    }
+  });
 
-  // Calendar sync mỗi 5 phút
-  setInterval(async () => {
+  // Sync Calendar mỗi 5 phút
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('[Job] Running calendar sync...');
     try {
       const pool = await getPool();
       const users = await pool.request()
@@ -57,9 +63,8 @@ function startJobs() {
     } catch (e) {
       console.error('[Job] Calendar sync loop error:', e);
     }
-  }, 5 * 60 * 1000);
+  });
 }
-
 // Start server
 (async () => {
   try {

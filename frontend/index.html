@@ -90,6 +90,7 @@
           <!-- Times -->
           <div class="w-14 bg-gray-50 border-r">
             <!-- generate hours -->
+             <div style="height: 20px;"></div>
             <div id="hours-container">
               <!-- JS fills -->
             </div>
@@ -125,7 +126,7 @@
     <!--Event creation panel (floating) -->
     <div id="event-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
       <div class="flex justify-between items-center mb-2">
-        <div class="font-semibold">Tạo Sự Kiện</div>
+        <div id = "e-event" class="font-semibold">Tạo Sự Kiện</div>
         <button id="close-event" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
       </div>
     <div class="space-y-2 text-sm">
@@ -172,18 +173,25 @@
       <div id="event-feedback" class="text-xs text-red-600"></div>
     </div>
     </div>
+
+    
       
 
     <!-- Task creation / suggestion panel (floating) -->
     <div id="task-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
       <div class="flex justify-between items-center mb-2">
-        <div class="font-semibold">Tạo Task</div>
+        <div id="t-title" class="font-semibold">Tạo Task</div>
         <button id="close-task" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
       </div>
       <div class="space-y-2 text-sm">
+        <input id="task-id" type="hidden" />
         <div>
           <label class="block">Tiêu đề</label>
           <input id="task-title" type="text" class="w-full border rounded px-3 py-2" placeholder="Ví dụ: Gọi khách hàng" />
+        </div>
+        <div>
+          <label class="block">Mô tả</label>
+          <textarea id="task-description" class="w-full border rounded px-3 py-2" rows="3" placeholder="Mô tả công việc"></textarea>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
@@ -209,6 +217,8 @@
           </div>
         </div>
         <button id="create-task" class="w-full bg-blue-600 text-white px-4 py-2 rounded">Tạo & Gợi ý slot</button>
+        <button id="save-task" class="w-full bg-green-600 text-white px-4 py-2 rounded hidden">Lưu task</button>
+
         <div id="task-feedback" class="text-xs text-red-600"></div>
         <div id="suggestion-box" class="mt-2 hidden p-3 border rounded bg-yellow-50">
           <div class="font-medium mb-1">Gợi ý từ AI</div>

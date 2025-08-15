@@ -19,6 +19,7 @@
     "googleapis": "^154.1.0",
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.1.0",
-    "mssql": "^11.0.1"
+    "mssql": "^11.0.1",
+    "node-cron": "^4.2.1"
   }
 }

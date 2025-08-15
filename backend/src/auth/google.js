@@ -107,6 +107,6 @@ export async function handleOAuthCallback(code) {
     return { token: jwtToken, user_uuid: userUuid };
   } catch (err) {
     console.error('OAuth callback error:', err);
-    throw err; // caller xử lý, có thể trả 4xx/5xx phù hợp
+    throw err; 
   }
 }
