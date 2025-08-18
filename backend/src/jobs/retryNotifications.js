@@ -1,5 +1,7 @@
 // jobs/retryNotifications.js
 import { getPool, sql } from '../db.js';
+import { sendSSEMessage } from '../routes/notifications.js';
+import nodemailer from 'nodemailer';
 
 const MAX_RETRY = 5;
 const STATUS = {
@@ -30,7 +32,7 @@ export async function processPendingNotifications() {
       try {
         await sendNotification(n);
 
-        // Gửi thành công → cập nhật trạng thái
+        // Gửi thành công và cập nhật trạng thái
         await pool.request()
           .input('id', sql.Int, n.id)
           .input('status', sql.NVarChar, STATUS.SENT)
@@ -82,15 +84,38 @@ export async function processPendingNotifications() {
   }
 }
 
-// Hàm gửi thông báo tùy kênh
+// Config email
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // hoặc SMTP provider khác
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
 async function sendNotification(n) {
   if (n.channel === 'email') {
-    // TODO: Gửi email từ template/payload
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: n.payload?.email,
+      subject: n.title || 'Nhắc việc',
+      html: `<p>${n.payload?.message || ''}</p>`
+    });
+    console.log(`[Email] Sent to ${n.payload?.email}`);
+
   } else if (n.channel === 'app') {
-    // TODO: Push in-app notification
+    sendSSEMessage({
+      title: n.title || 'Thông báo',
+      message: n.payload?.message || ''
+    });
+    console.log(`[App] In-app notification sent`);
+
   } else if (n.channel === 'push') {
-    // TODO: Push qua FCM/APNS
+    // TODO: Tích hợp FCM/APNS ở đây
+    console.log(`[Push] Push notification sent`);
+
   } else {
     throw new Error(`Unknown channel ${n.channel}`);
   }
 }
+

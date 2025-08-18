@@ -1,3 +1,4 @@
+//taskController.js
 import { getPool, sql } from '../db.js';
 //import { suggestTimeSlot } from '../services/suggestionService.js';
 
@@ -195,7 +196,7 @@ export async function deleteTask(req, res) {
       return res.status(404).json({ error: 'Task not found or not authorized' });
     }
 
-    res.json({ message: 'Task deleted' });
+    res.status(204).send();
   } catch (err) {
     console.error('deleteTask error:', err);
     res.status(500).json({ error: 'Internal error' });

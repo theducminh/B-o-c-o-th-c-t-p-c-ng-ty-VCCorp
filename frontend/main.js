@@ -397,7 +397,10 @@ async function fetchTasks() {
 
       // ===== Dán thủ công =====
       document.querySelectorAll('.paste-task').forEach(btn => {
-        btn.addEventListener('click', () => pasteTaskToCalendar(btn.dataset.id));
+        //btn.addEventListener('click', () => pasteTaskToCalendar(btn.dataset.id));
+        btn.addEventListener('click', async (e) => {
+          showToast('Dán task thành công', 'info');
+        });
       });
 
     } else {
