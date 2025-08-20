@@ -25,11 +25,12 @@ export async function createTask(req, res) {
       deadline,
       priority = '',
       estimated_duration = 60,
-      status = 'todo'
+      status = 'todo',
+      notifications
     } = req.body;
     const user_uuid = req.user.uuid;
 
-    const errors = validateTaskInput({ title, deadline, priority, status });
+    const errors = validateTaskInput({ title, deadline, priority, status, notifications });
     if (errors.length) return res.status(400).json({ errors });
 
     // Gợi ý slot trước deadline
@@ -87,6 +88,27 @@ export async function createTask(req, res) {
 
     const createdTask = insertTaskRes.recordset[0];
 
+    // Insert notifications (nếu có)
+    if(notifications){
+      const channels = [];
+      if (notifications.app) channels.push('app');
+      if (notifications.email) channels.push('email');
+      if (notifications.push) channels.push('push');
+
+      for (const ch of channels) {
+        await transaction.request()
+          .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+          .input('task_id', sql.Int, createdTask.id)
+          .input('channel', sql.NVarChar, ch)
+          .input('scheduled_time', sql.DateTime2, deadline) // ví dụ: nhắc vào deadline
+          .query(`
+            INSERT INTO notifications (user_uuid, task_id, channel, scheduled_time, status, created_at, updated_at)
+            VALUES (@user_uuid, @task_id, @channel, @scheduled_time, 'pending', SYSUTCDATETIME(), SYSUTCDATETIME())
+          `);
+      }
+    }
+
+
     await transaction.commit();
 
     /*res.status(201).json({
@@ -100,7 +122,10 @@ export async function createTask(req, res) {
       task: createdTask,
     });
   } catch (err) {
-    await transaction.rollback();
+    if (transaction._aborted === false) {
+  await transaction.rollback();
+}
+
     console.error('createTask error:', err);
     res.status(500).json({ error: 'Internal error' });
   }
@@ -148,60 +173,185 @@ export async function listTasks(req, res) {
   }
 }
 
-
 export async function updateTask(req, res) {
+  const txPool = await getPool();
+  const transaction = new sql.Transaction(txPool);
+
   try {
     const { id } = req.params;
-    const { title, description, deadline, priority, status } = req.body;
+    const {
+      title,
+      description = '',
+      deadline,
+      priority,
+      status = 'todo',
+      // hỗ trợ cả 2 kiểu payload từ frontend
+      notifications           // { app: true/false, email: ..., push: ... }
+    } = req.body;
+
     const user_uuid = req.user.uuid;
 
-    const errors = validateTaskInput({ title, description, deadline, priority, status });
+    // validate cơ bản cho fields chính
+    const errors = validateTaskInput({ title, deadline, priority, status });
     if (errors.length) return res.status(400).json({ errors });
 
-    const pool = await getPool();
-    await pool.request()
+
+    await transaction.begin();
+
+    // 1) Update task
+    const updRes = await new sql.Request(transaction)
       .input('id', sql.Int, id)
       .input('user_uuid', sql.UniqueIdentifier, user_uuid)
       .input('title', sql.NVarChar, title)
-      .input('description', sql.NVarChar, description || '')
+      .input('description', sql.NVarChar, description)
       .input('deadline', sql.DateTime2, deadline)
       .input('priority', sql.NVarChar, priority)
       .input('status', sql.NVarChar, status)
       .query(`
         UPDATE tasks
-        SET title=@title, description=@description, deadline=@deadline,
-            priority=@priority, status=@status, updated_at=GETUTCDATE()
-        WHERE id=@id AND user_uuid=@user_uuid
+        SET title = @title,
+            description = @description,
+            deadline = @deadline,
+            priority = @priority,
+            status = @status,
+            updated_at = SYSUTCDATETIME()
+        WHERE id = @id AND user_uuid = @user_uuid;
+
+        SELECT @@ROWCOUNT AS affected;
       `);
 
-    res.json({ message: 'Task updated' });
+    if (!updRes.recordset?.[0]?.affected) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Task not found or not authorized' });
+    }
+
+    // 2) Lấy các notifications hiện có của task
+    const existingRes = await new sql.Request(transaction)
+      .input('task_id', sql.Int, id)
+      .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+      .query(`
+        SELECT id, channel, status
+        FROM notifications
+        WHERE task_id = @task_id AND user_uuid = @user_uuid
+      `);
+
+    const existing = existingRes.recordset || [];
+    const existingSet = new Set(existing.map(r => r.channel));
+let desiredChannels = [];
+if (notifications) {
+  if (notifications.app) desiredChannels.push('app');
+  if (notifications.email) desiredChannels.push('email');
+  if (notifications.push) desiredChannels.push('push');
+}
+
+    // 3) Xoá các kênh bị bỏ chọn (chỉ xoá bản ghi còn chờ gửi)
+    for (const ch of existingSet) {
+      if (!desiredChannels.includes(ch)) {
+        await new sql.Request(transaction)
+          .input('task_id', sql.Int, id)
+          .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+          .input('channel', sql.NVarChar, ch)
+          .query(`
+            DELETE FROM notifications
+            WHERE task_id = @task_id
+              AND user_uuid = @user_uuid
+              AND channel = @channel
+          `);
+      }
+    }
+
+    // 4) Thêm mới hoặc cập nhật scheduled_time cho kênh còn giữ
+    for (const ch of desiredChannels) {
+      if (!existingSet.has(ch)) {
+        // thêm mới
+        await new sql.Request(transaction)
+          .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+          .input('task_id', sql.Int, id)
+          .input('channel', sql.NVarChar, ch)
+          .input('scheduled_time', sql.DateTime2, deadline)
+          .query(`
+            INSERT INTO notifications
+              (user_uuid, task_id, channel, scheduled_time, status, payload, created_at, updated_at)
+            VALUES
+              (@user_uuid, @task_id, @channel, @scheduled_time, 'todo',
+               JSON_QUERY(CONCAT('{"type":"task","taskId":', @task_id, '}')),
+               SYSUTCDATETIME(), SYSUTCDATETIME())
+          `);
+      } else {
+        // cập nhật thời điểm gửi cho bản ghi còn chờ
+        await new sql.Request(transaction)
+          .input('task_id', sql.Int, id)
+          .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+          .input('channel', sql.NVarChar, ch)
+          .input('scheduled_time', sql.DateTime2, deadline)
+          .query(`
+            UPDATE notifications
+            SET scheduled_time = @scheduled_time,
+                updated_at = SYSUTCDATETIME()
+            WHERE task_id = @task_id
+              AND user_uuid = @user_uuid
+              AND channel = @channel
+              AND status IN ('todo')
+          `);
+      }
+    }
+
+    await transaction.commit();
+    return res.json({ message: 'Task updated' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'internal error' });
+    if (transaction._aborted === false) {
+      try { await transaction.rollback(); } catch {}
+    }
+    console.error('updateTask error:', err);
+    return res.status(500).json({ error: 'internal error' });
   }
 }
 
+
 export async function deleteTask(req, res) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+
   try {
     const { id } = req.params;
     const user_uuid = req.user.uuid;
 
-    const pool = await getPool();
-    const result = await pool.request()
+    await transaction.begin();
+
+    // 1) Xoá notifications trước
+    await new sql.Request(transaction)
       .input('id', sql.Int, id)
       .input('user_uuid', sql.UniqueIdentifier, user_uuid)
-      .query(`DELETE FROM tasks WHERE id = @id AND user_uuid = @user_uuid`);
+      .query(`
+        DELETE FROM notifications
+        WHERE task_id = @id AND user_uuid = @user_uuid
+      `);
+
+    // 2) Xoá task
+    const result = await new sql.Request(transaction)
+      .input('id', sql.Int, id)
+      .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+      .query(`
+        DELETE FROM tasks
+        WHERE id = @id AND user_uuid = @user_uuid
+      `);
 
     if (result.rowsAffected[0] === 0) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Task not found or not authorized' });
     }
 
-    res.status(204).send();
+    await transaction.commit();
+    return res.status(204).send();
   } catch (err) {
+    if (transaction._aborted === false) {
+      try { await transaction.rollback(); } catch {}
+    }
     console.error('deleteTask error:', err);
-    res.status(500).json({ error: 'Internal error' });
+    return res.status(500).json({ error: 'Internal error' });
   }
 }
+
 
 export async function getTaskById(req, res) {
   try {
@@ -218,9 +368,41 @@ export async function getTaskById(req, res) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    res.json(result.recordset[0]);
+    const task = result.recordset[0];
+    // Lấy notifications
+    const notifRes = await pool.request()
+      .input('task_id', sql.Int, id)
+      .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+      .query(`SELECT channel FROM notifications WHERE task_id = @task_id AND user_uuid = @user_uuid`);
+
+    const notifications = {
+      app: notifRes.recordset.some(n => n.channel === 'app'),
+      email: notifRes.recordset.some(n => n.channel === 'email'),
+      push: notifRes.recordset.some(n => n.channel === 'push'),
+    };
+
+    res.json({ ...task, notifications });
   } catch (err) {
     console.error('getTaskById error:', err);
     res.status(500).json({ error: 'Internal error' });
   }
 }
+
+export async function updateTaskStatus(req, res) {
+ const {status} = req.body;
+ if (!['todo', 'done'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+const pool = await getPool();
+  await pool.request()
+    .input('id', sql.Int, req.params.id)
+    .input('status', sql.NVarChar, status)
+    .query(`
+      UPDATE tasks
+      SET status = @status, updated_at = SYSUTCDATETIME()
+      WHERE id = @id
+    `);
+
+  res.json({ success: true });
+}
+

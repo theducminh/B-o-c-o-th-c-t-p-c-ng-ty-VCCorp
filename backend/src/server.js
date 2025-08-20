@@ -7,6 +7,7 @@ import cron from 'node-cron';
 import tasksRoute from './routes/tasks.js';
 import eventsRoute from './routes/events.js';
 import authRoute from './routes/auth.js';
+import notificationsRoute from './routes/notifications.js';
 import googleSyncRoute from './routes/googleSync.js';
 
 import { getPool, healthCheck } from './db.js';
@@ -27,6 +28,7 @@ app.use('/api/auth', authRoute);
 app.use('/api/tasks', tasksRoute);
 app.use('/api/events', eventsRoute);
 app.use('/api/google', googleSyncRoute);
+app.use('/api/notifications', notificationsRoute);
 
 app.get('/', (req, res) => res.send('Smart Schedule API running'));
 
@@ -48,8 +50,8 @@ function startJobs() {
     }
   });
 
-  // Sync Calendar mỗi 5 phút
-  cron.schedule('*/5 * * * *', async () => {
+  // Sync Calendar mỗi 10 phút
+  cron.schedule('*/10 * * * *', async () => {
     console.log('[Job] Running calendar sync...');
     try {
       const pool = await getPool();
@@ -70,17 +72,17 @@ function startJobs() {
   try {
     await getPool(); // Ensure DB connection
     app.listen(port, () => {
-      console.log(`🚀 Server running on port ${port}`);
+      console.log(` Server running on port ${port}`);
     });
     startJobs();
   } catch (err) {
-    console.error('❌ Failed to start server:', err);
+    console.error(' Failed to start server:', err);
     process.exit(1);
   }
 })();
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('🛑 Shutting down server...');
+  console.log(' Shutting down server...');
   process.exit(0);
 });

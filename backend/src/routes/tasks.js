@@ -5,7 +5,8 @@ import {
   listTasks,
   updateTask,
   deleteTask,
-  getTaskById
+  getTaskById,
+  updateTaskStatus,
 } from '../controllers/taskController.js';
 import { requireAuth } from '../auth/jwt.js';
 
@@ -19,5 +20,6 @@ router.get('/', listTasks);
 router.get('/:id', getTaskById);
 router.delete('/:id', deleteTask);
 router.put('/:id', updateTask);
+router.put('/:id/status', updateTaskStatus);
 
 export default router;
