@@ -13,6 +13,7 @@ import googleSyncRoute from './routes/googleSync.js';
 import { getPool, healthCheck } from './db.js';
 import { processPendingNotifications } from './jobs/retryNotifications.js';
 import { fetchAndSyncCalendar } from './services/calendarService.js';
+import { sendEmailReminder } from './services/gmailService.js';
 
 dotenv.config();
 
@@ -64,6 +65,44 @@ function startJobs() {
       }
     } catch (e) {
       console.error('[Job] Calendar sync loop error:', e);
+    }
+  });
+
+  // Mail  nhắc nhở trước 1 giờ
+  cron.schedule('* * * * *', async () => {
+    console.log('[Job] Checking upcoming tasks (1h before deadline)...');
+    try {
+      const pool = await getPool();
+      const result = await pool.request()
+        .query(`
+          SELECT t.id, t.title, t.deadline, t.user_uuid, u.email
+          FROM tasks t
+          JOIN users u ON u.uuid = t.user_uuid
+          WHERE t.status = 'todo'
+            AND t.deadline IS NOT NULL
+            AND DATEDIFF(minute, SYSUTCDATETIME(), t.deadline) BETWEEN 0 AND 60
+             AND NOT EXISTS (
+    SELECT 1 FROM notifications n
+    WHERE n.task_id = t.id AND n.type = 'reminder' AND n.status = 'sent'
+  )
+        `);
+
+      for (const task of result.recordset) {
+        try {
+          await sendEmailReminder(
+            task.user_uuid,
+            task.id,
+            task.email,
+            "⏰ Nhắc nhở công việc sắp đến hạn",
+            `<p>Bạn có công việc <b>${task.title}</b> sẽ đến hạn vào lúc ${task.deadline}.</p>`
+          );
+          console.log(`[Job] Sent reminder for task ${task.id} to ${task.email}`);
+        } catch (err) {
+          console.error(`[Job] Failed to send reminder for task ${task.id}:`, err.message);
+        }
+      }
+    } catch (e) {
+      console.error('[Job] Error checking upcoming tasks:', e);
     }
   });
 }

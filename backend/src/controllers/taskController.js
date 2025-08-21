@@ -88,10 +88,47 @@ export async function createTask(req, res) {
 
     const createdTask = insertTaskRes.recordset[0];
 
+    //Notification
+    const notifReq = new sql.Request(transaction);
+
+    // Reminder 1h trước deadline (nếu deadline còn cách >1h)
+    const reminderTime = new Date(deadline);
+    reminderTime.setHours(reminderTime.getHours() - 1);
+
+    if (reminderTime > new Date()) {
+      await notifReq
+        .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+        .input('task_id', sql.Int, createdTask.id)
+        .input('type', sql.NVarChar, 'reminder')
+        .input('channel', sql.NVarChar, 'app')
+        .input('scheduled_time', sql.DateTime2, reminderTime)
+        .input('payload', sql.NVarChar, JSON.stringify({
+          message: `Task "${title}" sắp đến hạn vào ${deadline}`
+        }))
+        .query(`
+          INSERT INTO notifications (user_uuid, task_id, type, channel, scheduled_time, status, payload, created_at, updated_at)
+          VALUES (@user_uuid, @task_id, @type, @channel, @scheduled_time, 'pending', @payload, SYSUTCDATETIME(), SYSUTCDATETIME())
+        `);
+    }
+
+    // Overdue (đúng deadline)
+    await notifReq
+      .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+      .input('task_id', sql.Int, createdTask.id)
+      .input('type', sql.NVarChar, 'overdue')
+      .input('channel', sql.NVarChar, 'app')
+      .input('scheduled_time', sql.DateTime2, deadline)
+      .input('payload', sql.NVarChar, JSON.stringify({
+        message: `Task "${title}" đã đến hạn!`
+      }))
+      .query(`
+        INSERT INTO notifications (user_uuid, task_id, type, channel, scheduled_time, status, payload, created_at, updated_at)
+        VALUES (@user_uuid, @task_id, @type, @channel, @scheduled_time, 'pending', @payload, SYSUTCDATETIME(), SYSUTCDATETIME())
+      `);
+
     // Insert notifications (nếu có)
     if(notifications){
       const channels = [];
-      if (notifications.app) channels.push('app');
       if (notifications.email) channels.push('email');
       if (notifications.push) channels.push('push');
 
@@ -239,7 +276,6 @@ export async function updateTask(req, res) {
     const existingSet = new Set(existing.map(r => r.channel));
 let desiredChannels = [];
 if (notifications) {
-  if (notifications.app) desiredChannels.push('app');
   if (notifications.email) desiredChannels.push('email');
   if (notifications.push) desiredChannels.push('push');
 }
@@ -389,20 +425,71 @@ export async function getTaskById(req, res) {
 }
 
 export async function updateTaskStatus(req, res) {
- const {status} = req.body;
- if (!['todo', 'done'].includes(status)) {
+  const { status } = req.body;
+  const { id } = req.params;
+  const user_uuid = req.user.uuid;
+
+  if (!['todo', 'done'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
-const pool = await getPool();
-  await pool.request()
-    .input('id', sql.Int, req.params.id)
-    .input('status', sql.NVarChar, status)
-    .query(`
-      UPDATE tasks
-      SET status = @status, updated_at = SYSUTCDATETIME()
-      WHERE id = @id
-    `);
 
-  res.json({ success: true });
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+
+  try {
+    await tx.begin();
+
+    // 1. Update task
+    const updateRes = await new sql.Request(tx)
+      .input('id', sql.Int, id)
+      .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+      .input('status', sql.NVarChar, status)
+      .query(`
+        UPDATE tasks
+        SET status = @status, updated_at = SYSUTCDATETIME()
+        WHERE id = @id AND user_uuid = @user_uuid;
+      `);
+
+    // MSSQL driver không trả @@ROWCOUNT → dùng rowsAffected
+    if (updateRes.rowsAffected[0] === 0) {
+      throw new Error('Task not found or permission denied');
+    }
+
+    // 2. Nếu done → freeze
+    if (status === 'done') {
+      await new sql.Request(tx)
+        .input('task_id', sql.Int, id)
+        .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+        .query(`
+          UPDATE notifications
+          SET status = 'frozen', updated_at = SYSUTCDATETIME()
+          WHERE task_id = @task_id
+            AND user_uuid = @user_uuid
+            AND status = 'pending';
+        `);
+    }
+
+    // 3. Nếu todo → revive
+    if (status === 'todo') {
+      await new sql.Request(tx)
+        .input('task_id', sql.Int, id)
+        .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+        .query(`
+          UPDATE notifications
+          SET status = 'pending', updated_at = SYSUTCDATETIME()
+          WHERE task_id = @task_id
+            AND user_uuid = @user_uuid
+            AND status = 'frozen'
+            AND scheduled_time > SYSUTCDATETIME();
+        `);
+    }
+
+    await tx.commit();
+    res.json({ success: true, status });
+  } catch (err) {
+    if (tx._aborted === false) await tx.rollback();
+    console.error('updateTaskStatus error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
 }
 

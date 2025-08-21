@@ -1,3 +1,4 @@
+// auth/google.js
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
 import { getPool, sql } from '../db.js';
@@ -19,7 +20,8 @@ export function getAuthURL() {
       'email',
       'profile',
       'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/calendar.events'
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/gmail.send'
     ],
     prompt: 'consent',
     access_type: 'offline' // để có refresh token
@@ -78,15 +80,38 @@ export async function handleOAuthCallback(code) {
         `);
     }
 
+    
+    // Chuẩn hóa refresh token: giữ cái cũ nếu Google không trả mới
+    const existingIntegration = await pool.request()
+      .input('user_uuid', sql.UniqueIdentifier, userUuid)
+      .input('provider', sql.NVarChar, 'google')
+      .query(`
+        SELECT TOP 1 refresh_token FROM integration_tokens 
+        WHERE user_uuid = @user_uuid AND provider = @provider
+      `);
+
+    const refreshTokenToSave = tokens.refresh_token 
+      ? tokens.refresh_token 
+      : existingIntegration.recordset[0]?.refresh_token || null;
+
+    // Chuẩn hóa scope
+    const scopes = (tokens.scope || '')
+      .split(' ')
+      .filter(Boolean)
+      .join(',');
     // Upsert integration token (lưu access & refresh)
     // Chọn kiểu cập nhật: nếu đã có, ghi đè; nếu không có thì insert
     await pool.request()
       .input('user_uuid', sql.UniqueIdentifier, userUuid)
       .input('provider', sql.NVarChar, 'google')
       .input('access_token', sql.NVarChar(sql.MAX), tokens.access_token || '')
-      .input('refresh_token', sql.NVarChar(sql.MAX), tokens.refresh_token || '')
-      .input('expiry', sql.DateTime2, tokens.expiry_date ? new Date(tokens.expiry_date) : null)
-      .input('scopes', sql.NVarChar(sql.MAX), tokens.scope || '')
+      .input('refresh_token', sql.NVarChar(sql.MAX), refreshTokenToSave)
+      .input(
+        "expiry",
+        sql.DateTime2,
+        tokens.expiry_date ? new Date(tokens.expiry_date) : null
+      )
+      .input('scopes', sql.NVarChar(sql.MAX), scopes || '')
       .query(`
         MERGE integration_tokens AS target
         USING (SELECT @user_uuid AS user_uuid, @provider AS provider) AS source
@@ -104,7 +129,7 @@ export async function handleOAuthCallback(code) {
 
     const jwtToken = generateJWT({ uuid: userUuid, email });
 
-    return { token: jwtToken, user_uuid: userUuid };
+    return { token: jwtToken, user_uuid: userUuid, email };
   } catch (err) {
     console.error('OAuth callback error:', err);
     throw err; 

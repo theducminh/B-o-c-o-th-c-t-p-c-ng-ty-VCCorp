@@ -1,11 +1,12 @@
 // jobs/retryNotifications.js
 import { getPool, sql } from '../db.js';
 import { sendSSEMessage } from '../routes/notifications.js';
-import nodemailer from 'nodemailer';
+import { sendEmailReminder } from '../services/gmailService.js';
 
 const MAX_RETRY = 5;
 const STATUS = {
   PENDING: 'pending',   // đang chờ
+  FROZEN: 'frozen',     // đã bị đóng băng
   SENT: 'sent',      // đã gửi và task đã hoàn thành
   FAILED: 'failed'   // gửi lỗi
 };
@@ -36,6 +37,14 @@ export async function processPendingNotifications() {
         await sendNotification(n);
 
         if (n.task_status === 'todo') {
+
+            if (n.type === 'reminder') {
+    console.log(`[Reminder] Task ${n.task_id} gần đến hạn -> nhắc nhở`);
+  } else if (n.type === 'overdue') {
+    console.log(`[Overdue] Task ${n.task_id} đã quá hạn -> nhắc nhở`);
+  }
+
+          if (n.type === 'overdue') {
   // Task chưa xong -> dời lịch sang 8h sáng ngày mai
   const nextDay = new Date();
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
@@ -53,13 +62,14 @@ export async function processPendingNotifications() {
     `);
 
   console.log(`[Reminder] Task ${n.task_id} chưa xong -> sẽ nhắc lại lúc ${nextDay}`);
+    }
 }
 
 else {
   // Task đã hoàn thành -> đánh dấu notification đã sent
   await pool.request()
     .input('id', sql.Int, n.id)
-    .input('status', sql.NVarChar, STATUS.SENT)
+    .input('status', sql.NVarChar, STATUS.FROZEN)
     .query(`
       UPDATE notifications
       SET status = @status,
@@ -158,23 +168,17 @@ async function handleRetry(pool, n, err) {
     console.warn(`[Retry] Notification ${n.id} -> retry ${newRetry}, next at ${nextSchedule}`);
   }
 }
-// Config email
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // hoặc dùng SMTP server riêng
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+
 
 async function sendNotification(n) {
   if (n.channel === 'email') {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: n.payload?.email,
-      subject: n.title || 'Nhắc việc',
-      html: `<p>${n.payload?.message || ''}</p>`
-    });
+    if (!n.payload?.email) throw new Error("Missing recipient email");
+    await sendEmailReminder(
+      n.user_uuid,
+      n.payload.email,
+      n.title || 'Nhắc việc',
+      n.payload?.message || ''
+    );
     console.log(`[Email] Sent to ${n.payload?.email}`);
 
   } else if (n.channel === 'app') {
@@ -183,8 +187,9 @@ async function sendNotification(n) {
     task_id: n.task_id,
     channel: n.channel,
     title: n.title || n.task_title || 'Thông báo',
+    deadline: n.deadline,
     payload: { 
-      message: n.payload?.message || `Task "${n.task_title}" sắp đến hạn`
+      message: n.payload?.message || `Task "${n.task_title}" có deadline "${n.deadline}" chưa hoàn thành`
     }
   });
   console.log(`[App] In-app notification sent`);
