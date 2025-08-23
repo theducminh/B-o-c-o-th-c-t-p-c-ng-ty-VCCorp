@@ -126,24 +126,6 @@ export async function createTask(req, res) {
         VALUES (@user_uuid, @task_id, @type, @channel, @scheduled_time, 'pending', @payload, SYSUTCDATETIME(), SYSUTCDATETIME())
       `);
 
-    // Insert notifications (nếu có)
-    if(notifications){
-      const channels = [];
-      if (notifications.email) channels.push('email');
-      if (notifications.push) channels.push('push');
-
-      for (const ch of channels) {
-        await transaction.request()
-          .input('user_uuid', sql.UniqueIdentifier, user_uuid)
-          .input('task_id', sql.Int, createdTask.id)
-          .input('channel', sql.NVarChar, ch)
-          .input('scheduled_time', sql.DateTime2, deadline) // ví dụ: nhắc vào deadline
-          .query(`
-            INSERT INTO notifications (user_uuid, task_id, channel, scheduled_time, status, created_at, updated_at)
-            VALUES (@user_uuid, @task_id, @channel, @scheduled_time, 'pending', SYSUTCDATETIME(), SYSUTCDATETIME())
-          `);
-      }
-    }
 
 
     await transaction.commit();

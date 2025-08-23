@@ -2,8 +2,9 @@
 import { getPool, sql } from '../db.js';
 import { sendSSEMessage } from '../routes/notifications.js';
 import { sendEmailReminder } from '../services/gmailService.js';
+import { sendZaloMessage } from '../services/zaloService.js';
 
-const MAX_RETRY = 5;
+const MAX_RETRY = 7;
 const STATUS = {
   PENDING: 'pending',   // đang chờ
   FROZEN: 'frozen',     // đã bị đóng băng
@@ -23,7 +24,8 @@ export async function processPendingNotifications() {
       .query(`
         SELECT TOP (50) n.*, 
        t.status AS task_status,
-       t.title  AS task_title
+       t.title  AS task_title,
+       t.deadline AS task_deadline
       FROM notifications n WITH (ROWLOCK, UPDLOCK)
       JOIN tasks t ON n.task_id = t.id
        WHERE n.status = @status
@@ -38,22 +40,30 @@ export async function processPendingNotifications() {
 
         if (n.task_status === 'todo') {
 
-            if (n.type === 'reminder') {
-    console.log(`[Reminder] Task ${n.task_id} gần đến hạn -> nhắc nhở`);
-  } else if (n.type === 'overdue') {
-    console.log(`[Overdue] Task ${n.task_id} đã quá hạn -> nhắc nhở`);
-  }
+          if (n.type === 'reminder') {
+            console.log(`[Reminder] Task ${n.task_id} gần đến hạn -> nhắc nhở`);
+             await pool.request()
+                .input('id', sql.Int, n.id)
+                .input('status', sql.NVarChar, STATUS.SENT)
+                .query(`
+                  UPDATE notifications
+                  SET status = @status,
+                      sent_time = SYSUTCDATETIME(),
+                      updated_at = SYSUTCDATETIME()
+                  WHERE id = @id
+                `);
+              console.log(`[Reminder] Task ${n.task_id} nhắc 1 lần -> SENT`);
+          } else if (n.type === 'overdue') {
+            console.log(`[Overdue] Task ${n.task_id} đã quá hạn -> nhắc nhở`);
+            // Task chưa xong -> dời lịch sang 8h sáng ngày mai
+            const nextDay = new Date();
+            nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+            nextDay.setUTCHours(8, 0, 0, 0); // 8h sáng UTC (tùy múi giờ có thể chỉnh)
 
-          if (n.type === 'overdue') {
-  // Task chưa xong -> dời lịch sang 8h sáng ngày mai
-  const nextDay = new Date();
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  nextDay.setUTCHours(8, 0, 0, 0); // 8h sáng UTC (tùy múi giờ có thể chỉnh)
-
-  await pool.request()
-    .input('id', sql.Int, n.id)
-    .input('next', sql.DateTime2, nextDay)
-    .query(`
+            await pool.request()
+              .input('id', sql.Int, n.id)
+              .input('next', sql.DateTime2, nextDay)
+              .query(`
       UPDATE notifications
       SET updated_at = SYSUTCDATETIME(),
           retry_count = ISNULL(retry_count, 0),
@@ -61,16 +71,16 @@ export async function processPendingNotifications() {
       WHERE id = @id
     `);
 
-  console.log(`[Reminder] Task ${n.task_id} chưa xong -> sẽ nhắc lại lúc ${nextDay}`);
-    }
-}
+            console.log(`[Reminder] Task ${n.task_id} chưa xong -> sẽ nhắc lại lúc ${nextDay}`);
+          }
+        }
 
-else {
-  // Task đã hoàn thành -> đánh dấu notification đã sent
-  await pool.request()
-    .input('id', sql.Int, n.id)
-    .input('status', sql.NVarChar, STATUS.FROZEN)
-    .query(`
+        else {
+          // Task đã hoàn thành -> đánh dấu notification đã sent
+          await pool.request()
+            .input('id', sql.Int, n.id)
+            .input('status', sql.NVarChar, STATUS.FROZEN)
+            .query(`
       UPDATE notifications
       SET status = @status,
           sent_time = SYSUTCDATETIME(),
@@ -79,8 +89,8 @@ else {
       WHERE id = @id
     `);
 
-  console.log(`[Done] Task ${n.task_id} đã hoàn thành -> notification sent`);
-}
+          console.log(`[Done] Task ${n.task_id} đã hoàn thành -> notification sent`);
+        }
 
 
       } catch (err) {
@@ -182,19 +192,19 @@ async function sendNotification(n) {
     console.log(`[Email] Sent to ${n.payload?.email}`);
 
   } else if (n.channel === 'app') {
-  sendSSEMessage({
-    id: n.id,
-    task_id: n.task_id,
-    channel: n.channel,
-    title: n.title || n.task_title || 'Thông báo',
-    deadline: n.deadline,
-    payload: { 
-      message: n.payload?.message || `Task "${n.task_title}" có deadline "${n.deadline}" chưa hoàn thành`
-    }
-  });
-  console.log(`[App] In-app notification sent`);
-} else if (n.channel === 'push') {
-    // TODO: tích hợp FCM/APNS
+    sendSSEMessage({
+      id: n.id,
+      task_id: n.task_id,
+      channel: n.channel, 
+      title: n.title || n.task_title || 'Thông báo',
+      deadline: n.task_deadline,
+      payload: {
+        message: n.payload?.message || `Task "${n.task_title}" có deadline "${n.task_deadline}" chưa hoàn thành`
+      }
+    });
+    console.log(`[App] In-app notification sent`);
+  } else if (n.channel === 'push') {
+    await sendZaloMessage(n.receiver, n.message);
     console.log(`[Push] Push notification sent`);
 
   } else {

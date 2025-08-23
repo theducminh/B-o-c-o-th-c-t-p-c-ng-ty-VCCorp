@@ -93,7 +93,7 @@ function startJobs() {
             task.user_uuid,
             task.id,
             task.email,
-            "⏰ Nhắc nhở công việc sắp đến hạn",
+            "Nhắc nhở công việc sắp đến hạn",
             `<p>Bạn có công việc <b>${task.title}</b> sẽ đến hạn vào lúc ${task.deadline}.</p>`
           );
           console.log(`[Job] Sent reminder for task ${task.id} to ${task.email}`);

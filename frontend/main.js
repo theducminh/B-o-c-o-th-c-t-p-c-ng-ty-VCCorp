@@ -10,20 +10,7 @@ function authHeaders() {
   return t ? { Authorization: 'Bearer ' + t } : {};
 }
 
-function showToast(msg, type='info') {
-  const colors = {
-    info: 'bg-blue-100 border-blue-500 text-blue-800',
-    success: 'bg-green-100 border-green-500 text-green-800',
-    error: 'bg-red-100 border-red-500 text-red-800'
-  };
-  const container = document.getElementById('toast-container');
-  const el = document.createElement('div');
-  el.className = `border-l-4 p-3 rounded shadow flex justify-between items-center ${colors[type]}`;
-  el.innerHTML = `<div class="text-sm">${msg}</div><button class="ml-2 font-bold">&times;</button>`;
-  el.querySelector('button').addEventListener('click', () => el.remove());
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
-}
+
 
 // Week calculation
 function getStartOfWeek(d) {
@@ -342,7 +329,11 @@ async function fetchTasks() {
           <div class="flex flex-col gap-1 text-xs">
             <button class="edit-task text-blue-600 underline" data-id="${t.id}">Sửa</button>
             <button class="delete-task text-red-600 underline" data-id="${t.id}">Xoá</button>
-            <button class="paste-task text-green-600 underline" data-id="${t.id}">Dán</button>
+            <button class="toggle-complete underline" data-id="${t.id}" data-status="${t.status}">
+  ${t.status === 'done' 
+    ? '<span class="text-green-600">Đã hoàn thành</span>' 
+    : '<span class="text-gray-600">Chưa hoàn thành</span>'}
+</button>
           </div>
         `;
         list.appendChild(d);
@@ -395,13 +386,32 @@ async function fetchTasks() {
         });
       });
 
-      // ===== Dán thủ công =====
-      document.querySelectorAll('.paste-task').forEach(btn => {
-        //btn.addEventListener('click', () => pasteTaskToCalendar(btn.dataset.id));
-        btn.addEventListener('click', async (e) => {
-          showToast('Dán task thành công', 'info');
-        });
+      // ===== Toggle hoàn thành =====
+document.querySelectorAll('.toggle-complete').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    const taskId = e.target.closest('button').dataset.id;
+    const currentStatus = e.target.closest('button').dataset.status;
+    const newStatus = currentStatus === 'done' ? 'todo' : 'done';
+
+    try {
+      const res = await fetch(`${API_PREFIX}/tasks/${taskId}/status`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
       });
+      if (!res.ok) throw new Error('Failed to update task status');
+      showToast(
+        newStatus === 'done' ? 'Đã đánh dấu hoàn thành' : 'Đã chuyển về chưa hoàn thành',
+        'success'
+      );
+      fetchTasks();
+    } catch (err) {
+      console.error(err);
+      showToast('Có lỗi khi cập nhật task', 'error');
+    }
+  });
+});
+
 
     } else {
       list.innerHTML = '<div class="text-gray-500 text-xs">Không có task</div>';
@@ -494,13 +504,16 @@ document.getElementById('create-task')?.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload)
     });
+
     const data = await res.json();
+
     if (!res.ok) {
       feedback.textContent = (data.errors || data.error || 'Tạo thất bại').toString();
       showToast('Tạo task thất bại', 'error');
       return;
     }
     showToast('Tạo task thành công', 'success');
+
     if (data.suggestion) {
       document.getElementById('suggestion-box').classList.remove('hidden');
       document.getElementById('suggestion-content').textContent =
@@ -512,6 +525,7 @@ document.getElementById('create-task')?.addEventListener('click', async () => {
         }
       };
     }
+    
     fetchTasks();
     resetTaskPanel();
   } catch (e) {
@@ -619,6 +633,145 @@ async function updateTask(taskId) {
   }
 }
 
+function showToast(msg, type='info') {
+  const colors = {
+    info: 'bg-blue-100 border-blue-500 text-blue-800',
+    success: 'bg-green-100 border-green-500 text-green-800',
+    error: 'bg-red-100 border-red-500 text-red-800'
+  };
+  let container = document.getElementById('toast-container');
+
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'fixed top-4 right-4 space-y-2 z-50';
+    document.body.appendChild(container);
+  }
+
+  const el = document.createElement('div');
+  el.className = `border-l-4 p-3 rounded shadow flex justify-between items-center ${colors[type]}`;
+  el.innerHTML = `<div class="text-sm">${msg}</div><button class="ml-2 font-bold">&times;</button>`;
+  el.querySelector('button').addEventListener('click', () => el.remove());
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function fetchHistory() {
+  const listEl = document.getElementById("historyList");
+  listEl.innerHTML = "";
+  if (notificationHistory.length === 0) {
+    listEl.innerHTML = `<p class="text-gray-500 text-sm">Chưa có thông báo</p>`;
+    return;
+  }
+
+  notificationHistory.forEach(h => {
+    const item = document.createElement("div");
+    item.className = "p-2 border rounded-lg bg-gray-50";
+    item.innerHTML = `<div class="text-sm">${h.msg}</div><div class="text-xs text-gray-400">${h.time}</div>`;
+    listEl.appendChild(item);
+  });
+}
+
+
+async function fetchTodayNotifications() {
+  try {
+    const res = await fetch(`${API_PREFIX}/notifications/today`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) throw new Error("Fetch today notifications failed");
+
+    const notis = await res.json();
+    if (!Array.isArray(notis) || notis.length === 0) return;
+
+    // Hiển thị từng notification trong ngày
+    notis.forEach(showInAppNotification);
+
+  } catch (err) {
+    console.error("fetchTodayNotifications error:", err);
+  }
+}
+
+
+function saveHistory() {
+  try {
+    localStorage.setItem('notificationHistory', JSON.stringify(notificationHistory));
+  } catch {}
+}
+
+
+function loadHistory() {
+  const saved = localStorage.getItem("notificationHistory");
+  if (saved) {
+    notificationHistory.splice(0, notificationHistory.length, ...JSON.parse(saved));
+  }
+}
+const notificationHistory = (() => {
+  try {
+    const saved = localStorage.getItem('notificationHistory');
+    const arr = saved ? JSON.parse(saved) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+})();
+
+
+function showInAppNotification(n) {
+  const channel = n.channel || "app";
+  const title = n.title || "Thông báo";
+  const message = parsePayload(n.payload);
+
+  const msg = `[${channel}] ${title}: ${message}`;
+  showToast(msg, "info");
+
+  // lưu lịch sử
+  notificationHistory.unshift({
+    time: new Date().toLocaleString(),
+    msg
+  });
+  saveHistory();
+}
+
+
+// ---- Notifications helpers ----
+function parsePayload(payload) {
+  if (typeof payload === "string") {
+    try { const p = JSON.parse(payload); return p.message || payload; } catch { return payload; }
+  }
+  if (payload && typeof payload === "object") return payload.message || "";
+  return "";
+}
+
+let evtSource;
+function connectSSE() {
+  if (evtSource || !getJWT()) return;
+  evtSource = new EventSource(`${API_PREFIX}/notifications/stream`, { withCredentials: true });
+  evtSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log("SSE event received:", data);
+      showInAppNotification(data);
+    } catch (e) {
+      console.warn("Bad SSE payload", e);
+    }
+  };
+}
+// DOM events
+const modal = document.getElementById("historyModal");
+const openBtn = document.getElementById("openHistoryBtn");
+const closeBtn = document.getElementById("closeHistoryBtn");
+
+openBtn?.addEventListener("click", () => {
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  fetchHistory(); // load lịch sử khi mở
+});
+
+closeBtn?.addEventListener("click", () => {
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+});
+
 
 // OAuth login
 document.getElementById('btn-google-login').addEventListener('click', () => {
@@ -628,7 +781,12 @@ document.getElementById('btn-google-login').addEventListener('click', () => {
     if (e.data?.token) {
       localStorage.setItem('jwt', e.data.token);
       localStorage.setItem('user_uuid', e.data.user_uuid);
-      document.getElementById('user-badge').classList.remove('hidden');
+      if(e.data.email) {
+        localStorage.setItem('google_email', e.data.email);
+        document.getElementById('user-email').textContent = e.data.email;
+      }
+      document.getElementById('btn-google-login').classList.add('hidden');
+      document.getElementById('user-menu').classList.remove('hidden');
       document.getElementById('btn-logout').classList.remove('hidden');
       showToast('Đăng nhập thành công', 'success');
       // auto sync
@@ -647,13 +805,29 @@ document.getElementById('btn-google-login').addEventListener('click', () => {
 document.getElementById('save-event').addEventListener('click', saveEvent);
 document.getElementById('delete-event').addEventListener('click', deleteEvent);
 
+// Logout
 document.getElementById('btn-logout').addEventListener('click', () => {
   localStorage.removeItem('jwt');
   localStorage.removeItem('user_uuid');
+  localStorage.removeItem('google_email');
+
+  // Reset UI
+  document.getElementById('btn-google-login').classList.remove('hidden');
   document.getElementById('user-badge').classList.add('hidden');
   document.getElementById('btn-logout').classList.add('hidden');
+  document.getElementById('sync-status').textContent = '';
+
   showToast('Đã đăng xuất', 'info');
 });
+
+// Toggle dropdown khi bấm vào user-badge
+document.getElementById('user-badge').addEventListener('click', () => {
+  document.getElementById('dropdown-menu').classList.toggle('hidden');
+});
+
+// Nếu click ra ngoài thì ẩn dropdown
+
+
 
 // Navigation
 document.getElementById('today-btn').addEventListener('click', () => {
@@ -695,19 +869,9 @@ document.getElementById('close-event').addEventListener('click', () => {
   document.getElementById('event-feedback').textContent = '';
 });
 
-// Initialization
-document.addEventListener('DOMContentLoaded', () => {
-  renderHours();
-  updateWeekLabel();
-  if (getJWT()) {
-    document.getElementById('user-badge').classList.remove('hidden');
-    document.getElementById('btn-logout').classList.remove('hidden');
-    fetchTasks();
-    fetchWeekEvents();
-  }
-});
 
-document.getElementById('btn-sync-calendar')?.addEventListener('click', async () => {
+
+document.getElementById('btn-sync-calendar').addEventListener('click', async () => {
   if (!getJWT()) {
     showToast('Bạn cần đăng nhập trước', 'error');
     return;
@@ -759,6 +923,29 @@ document.querySelectorAll('[data-day-offset]').forEach(dayCol => {
 });
 
 
+document.addEventListener('DOMContentLoaded', () => {
+  renderHours();
+  updateWeekLabel();
 
+  const token = getJWT();
+  const email = localStorage.getItem('google_email');
+
+  if (token) {
+    // Ẩn nút login
+    document.getElementById('btn-google-login').classList.add('hidden');
+
+    // Hiện user menu + email
+    const userMenu = document.getElementById('user-menu');
+    const userEmail = document.getElementById('user-email');
+    if (email) userEmail.textContent = email;
+    userMenu.classList.remove('hidden');
+
+    // Tải dữ liệu
+    fetchTasks();
+    fetchWeekEvents();
+    connectSSE();
+    fetchTodayNotifications();
+  }
+});
 
 
