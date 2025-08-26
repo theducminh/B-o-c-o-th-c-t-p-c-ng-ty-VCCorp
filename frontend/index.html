@@ -1,166 +1,183 @@
-  <!doctype html>
-  <html lang="vi">
-  <head>
-    <meta charset="utf-8" />
-    <title>Smart Schedule</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      .hour-row { height:50px; }
-      .event-block {
-        position: absolute;
-        left:4px;
-        right:4px;
-        padding:4px 6px;
-        border-radius:4px;
-        font-size:10px;
-        overflow:hidden;
-        box-shadow:0 2px 6px rgba(0,0,0,0.15);
-      }
-      .suggestion-badge {
-        background: #fffae6;
-        border: 1px dashed #f0c674;
-      }
-    </style>
-  </head>
-  <body class="bg-[#f1f3f4] font-sans min-h-screen flex flex-col">
-    <!-- Top bar -->
-    <div class="flex items-center justify-between px-4 py-2 bg-white shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="text-xl font-semibold">Smart Schedule</div>
-        <button id="today-btn" class="px-3 py-1 border rounded text-sm hover:bg-gray-100">Hôm nay</button>
-        <div class="flex items-center gap-1">
-          <button id="prev-week" class="px-2 py-1 hover:bg-gray-100 rounded">&lt;</button>
-          <div id="week-label" class="px-3 py-1 font-medium text-sm"></div>
-          <button id="next-week" class="px-2 py-1 hover:bg-gray-100 rounded">&gt;</button>
-        </div>
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Schedule</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hour-row {
+      height: 50px;
+    }
+
+    .event-block {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .suggestion-badge {
+      background: #fffae6;
+      border: 1px dashed #f0c674;
+    }
+  </style>
+</head>
+
+<body class="bg-[#f1f3f4] font-sans min-h-screen flex flex-col">
+  <!-- Top bar -->
+  <div class="flex items-center justify-between px-4 py-2 bg-white shadow-sm">
+    <div class="flex items-center gap-4">
+      <div class="text-xl font-semibold">Smart Schedule</div>
+      <button id="today-btn" class="px-3 py-1 border rounded text-sm hover:bg-gray-100">Hôm nay</button>
+      <div class="flex items-center gap-1">
+        <button id="prev-week" class="px-2 py-1 hover:bg-gray-100 rounded">&lt;</button>
+        <div id="week-label" class="px-3 py-1 font-medium text-sm"></div>
+        <button id="next-week" class="px-2 py-1 hover:bg-gray-100 rounded">&gt;</button>
       </div>
-      <div class="flex items-center gap-4">
-        <div id="sync-status" class="text-sm text-gray-600"></div>
-        <button id="btn-sync-calendar" class="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">Đồng bộ</button>
-      <button id="btn-google-login" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Kết nối Google Calendar</button>
-        <div id="user-menu" class="relative hidden">
-      <button id="user-badge" 
-        class="bg-green-100 px-3 py-1 rounded text-sm flex items-center gap-1">
-        <span id="user-email">user@gmail.com</span>
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M19 9l-7 7-7-7" />
-        </svg>
+    </div>
+    <div class="flex items-center gap-4">
+      <button id="open-suggestions" class="relative px-3 py-1 border rounded text-sm hover:bg-gray-100">
+        Gợi ý từ email
+        <span id="suggest-badge"
+          class="hidden absolute -top-2 -right-2 bg-red-600 text-white text-xs px-1.5 py-0.5 rounded-full">0</span>
       </button>
 
-      <!-- Dropdown -->
-      <div id="dropdown-menu" 
-        class="hidden absolute right-0 mt-1 w-40 bg-white border rounded shadow-md z-10">
-        <button id="btn-logout" 
-          class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-          Đăng xuất
+      <div id="sync-status" class="text-sm text-gray-600"></div>
+      <button id="btn-sync-calendar" class="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">Đồng
+        bộ</button>
+      <button id="btn-google-login" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Kết nối
+        Google Calendar</button>
+      <div id="user-menu" class="relative hidden">
+        <button id="user-badge" class="bg-green-100 px-3 py-1 rounded text-sm flex items-center gap-1">
+          <span id="user-email">user@gmail.com</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
         </button>
+
+        <!-- Dropdown -->
+        <div id="dropdown-menu" class="hidden absolute right-0 mt-1 w-40 bg-white border rounded shadow-md z-10">
+          <button id="btn-logout" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            Đăng xuất
+          </button>
+        </div>
       </div>
     </div>
-      </div>
 
+  </div>
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Sidebar -->
+    <div class="w-80 bg-white border-r flex flex-col">
+      <div class="p-4 border-b flex justify-between items-center">
+        <div class="font-semibold">Events</div>
+        <button id="open-event" class="text-xs bg-green-600 text-white px-3 py-1 rounded">Tạo event</button>
+      </div>
+      <div class="p-4 border-b flex justify-between items-center">
+        <div class="font-semibold">Tasks</div>
+        <button id="open-task" class="text-xs bg-green-600 text-white px-3 py-1 rounded">Tạo task</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <div class="flex gap-2">
+          <select id="filter-status" class="flex-1 border rounded px-2 py-1 text-xs">
+            <option value="">Tất cả</option>
+            <option value="todo">Todo</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
+          <select id="filter-priority" class="flex-1 border rounded px-2 py-1 text-xs">
+            <option value="">Ưu tiên</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <button id="apply-filters" class="w-full bg-green-500 text-white text-xs px-3 py-1 rounded">Áp dụng</button>
+      </div>
+      <div class="p-4 flex-1 overflow-auto">
+        <div id="task-list" class="space-y-2 text-sm">
+          <!-- task items -->
+        </div>
+      </div>
+      <div class="p-4 border-t text-xs">
+        <button id="openHistoryBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg shadow">
+          Lịch sử thông báo
+        </button>
+
+        <!-- Modal -->
+        <div id="historyModal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
+          <div class="bg-white rounded-2xl shadow-xl w-96 max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center p-4 border-b">
+              <h2 class="text-lg font-semibold">Lịch sử thông báo</h2>
+              <button id="closeHistoryBtn" class="text-gray-500 hover:text-gray-700">✖</button>
+            </div>
+            <div id="historyList" class="p-4 space-y-3">
+              <!-- Thông báo sẽ render vào đây -->
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="flex flex-1 overflow-hidden">
-      <!-- Sidebar -->
-      <div class="w-80 bg-white border-r flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center">
-          <div class="font-semibold">Events</div>
-          <button id="open-event" class="text-xs bg-green-600 text-white px-3 py-1 rounded">Tạo event</button>
-        </div>
-        <div class="p-4 border-b flex justify-between items-center">
-          <div class="font-semibold">Tasks</div>
-          <button id="open-task" class="text-xs bg-green-600 text-white px-3 py-1 rounded">Tạo task</button>
-        </div>
-        <div class="p-4 space-y-3">
-          <div class="flex gap-2">
-            <select id="filter-status" class="flex-1 border rounded px-2 py-1 text-xs">
-              <option value="">Tất cả</option>
-              <option value="todo">Todo</option>
-              <option value="in_progress">In Progress</option>
-              <option value="done">Done</option>
-            </select>
-            <select id="filter-priority" class="flex-1 border rounded px-2 py-1 text-xs">
-              <option value="">Ưu tiên</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-          <button id="apply-filters" class="w-full bg-green-500 text-white text-xs px-3 py-1 rounded">Áp dụng</button>
-        </div>
-        <div class="p-4 flex-1 overflow-auto">
-          <div id="task-list" class="space-y-2 text-sm">
-            <!-- task items -->
+    <!-- Calendar week view -->
+    <div class="flex-1 flex flex-col overflow-hidden relative">
+      <div class="flex-1 flex overflow-auto">
+        <!-- Times -->
+        <div class="w-14 bg-gray-50 border-r">
+          <!-- generate hours -->
+          <div style="height: 20px;"></div>
+          <div id="hours-container">
+            <!-- JS fills -->
           </div>
         </div>
-        <div class="p-4 border-t text-xs">
-            <button id="openHistoryBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg shadow">
-     Lịch sử thông báo
-  </button>
-
-  <!-- Modal -->
-  <div id="historyModal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-xl w-96 max-h-[80vh] overflow-y-auto">
-      <div class="flex justify-between items-center p-4 border-b">
-        <h2 class="text-lg font-semibold">Lịch sử thông báo</h2>
-        <button id="closeHistoryBtn" class="text-gray-500 hover:text-gray-700">✖</button>
-      </div>
-      <div id="historyList" class="p-4 space-y-3">
-        <!-- Thông báo sẽ render vào đây -->
+        <!-- Days columns -->
+        <div class="flex-1 grid grid-cols-7 relative bg-white">
+          <div data-day-offset="0" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">CN
+            </div>
+          </div>
+          <div data-day-offset="1" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T2
+            </div>
+          </div>
+          <div data-day-offset="2" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T3
+            </div>
+          </div>
+          <div data-day-offset="3" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T4
+            </div>
+          </div>
+          <div data-day-offset="4" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T5
+            </div>
+          </div>
+          <div data-day-offset="5" class="border-r border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T6
+            </div>
+          </div>
+          <div data-day-offset="6" class="border-b relative">
+            <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T7
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-        </div>
-      </div>
 
-      <!-- Calendar week view -->
-      <div class="flex-1 flex flex-col overflow-hidden relative">
-        <div class="flex-1 flex overflow-auto">
-          <!-- Times -->
-          <div class="w-14 bg-gray-50 border-r">
-            <!-- generate hours -->
-             <div style="height: 20px;"></div>
-            <div id="hours-container">
-              <!-- JS fills -->
-            </div>
-          </div>
-          <!-- Days columns -->
-          <div class="flex-1 grid grid-cols-7 relative bg-white">
-            <div data-day-offset="0" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">CN</div>
-            </div>
-            <div data-day-offset="1" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T2</div>
-            </div>
-            <div data-day-offset="2" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T3</div>
-            </div>
-            <div data-day-offset="3" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T4</div>
-            </div>
-            <div data-day-offset="4" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T5</div>
-            </div>
-            <div data-day-offset="5" class="border-r border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T6</div>
-            </div>
-            <div data-day-offset="6" class="border-b relative">
-              <div class="absolute top-0 left-0 right-0 flex justify-center text-[10px] font-semibold bg-gray-100 py-1">T7</div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <!--Event creation panel (floating) -->
+  <div id="event-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
+    <div class="flex justify-between items-center mb-2">
+      <div id="e-event" class="font-semibold">Tạo Sự Kiện</div>
+      <button id="close-event" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
     </div>
-
-    <!--Event creation panel (floating) -->
-    <div id="event-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
-      <div class="flex justify-between items-center mb-2">
-        <div id = "e-event" class="font-semibold">Tạo Sự Kiện</div>
-        <button id="close-event" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
-      </div>
     <div class="space-y-2 text-sm">
       <input id="event-id" type="hidden" />
       <div>
@@ -178,20 +195,23 @@
         </div>
       </div>
       <div>
-        <label class ="block">Link họp</label>
-        <input id="event-link" type="text" class="w-full border rounded px-3 py-2" placeholder="Ví dụ: https://meet.example.com/123" />
+        <label class="block">Link họp</label>
+        <input id="event-link" type="text" class="w-full border rounded px-3 py-2"
+          placeholder="Ví dụ: https://meet.example.com/123" />
       </div>
-      
+
       <div>
         <label class="block">Địa điểm</label>
-        <input id="event-location" type="text" class="w-full border rounded px-3 py-2" placeholder="Ví dụ: Phòng họp A" />
+        <input id="event-location" type="text" class="w-full border rounded px-3 py-2"
+          placeholder="Ví dụ: Phòng họp A" />
       </div>
       <div>
         <label class="block">Mô tả</label>
-        <textarea id="event-description" class="w-full border rounded px-3 py-2" rows="3" placeholder="Mô tả sự kiện"></textarea>
+        <textarea id="event-description" class="w-full border rounded px-3 py-2" rows="3"
+          placeholder="Mô tả sự kiện"></textarea>
       </div>
-       <div>
-        <label class ="block">Độ thường xuyên</label>
+      <div>
+        <label class="block">Độ thường xuyên</label>
         <select id="event-recurring" class="w-full border rounded px-2 py-1">
           <option value="none">Không lặp lại</option>
           <option value="daily">Hàng ngày</option>
@@ -204,66 +224,77 @@
       <button id="delete-event" class="w-full bg-red-600 text-white px-4 py-2 rounded hidden">Xoá Sự Kiện</button>
       <div id="event-feedback" class="text-xs text-red-600"></div>
     </div>
+  </div>
+
+
+  <div id="suggestions-panel" class="hidden fixed right-4 top-16 w-[480px] max-h-[70vh] overflow-auto bg-white border rounded-lg shadow-xl p-3">
+  <div class="flex items-center justify-between mb-2">
+    <div class="font-semibold">Gợi ý từ email</div>
+    <button id="close-suggestions" class="text-sm px-2 py-1 hover:bg-gray-100 rounded">Đóng</button>
+  </div>
+  <div id="suggestions-list" class="space-y-3"></div>
+</div>
+
+
+  <!-- Task creation / suggestion panel (floating) -->
+  <div id="task-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
+    <div class="flex justify-between items-center mb-2">
+      <div id="t-title" class="font-semibold">Tạo Task</div>
+      <button id="close-task" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
     </div>
-
-    
-      
-
-    <!-- Task creation / suggestion panel (floating) -->
-    <div id="task-panel" class="fixed top-16 right-6 w-[360px] bg-white rounded shadow-lg p-4 hidden z-40">
-      <div class="flex justify-between items-center mb-2">
-        <div id="t-title" class="font-semibold">Tạo Task</div>
-        <button id="close-task" class="text-gray-500 hover:bg-gray-100 rounded p-1">&times;</button>
+    <div class="space-y-2 text-sm">
+      <input id="task-id" type="hidden" />
+      <div>
+        <label class="block">Tiêu đề</label>
+        <input id="task-title" type="text" class="w-full border rounded px-3 py-2"
+          placeholder="Ví dụ: Gọi khách hàng" />
       </div>
-      <div class="space-y-2 text-sm">
-        <input id="task-id" type="hidden" />
+      <div>
+        <label class="block">Mô tả</label>
+        <textarea id="task-description" class="w-full border rounded px-3 py-2" rows="3"
+          placeholder="Mô tả công việc"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="block">Tiêu đề</label>
-          <input id="task-title" type="text" class="w-full border rounded px-3 py-2" placeholder="Ví dụ: Gọi khách hàng" />
-        </div>
-        <div>
-          <label class="block">Mô tả</label>
-          <textarea id="task-description" class="w-full border rounded px-3 py-2" rows="3" placeholder="Mô tả công việc"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block">Deadline</label>
-            <input id="task-deadline" type="datetime-local" class="w-full border rounded px-2 py-1" />
-          </div>
-          <div>
-            <label class="block">Ưu tiên</label>
-            <select id="task-priority" class="w-full border rounded px-2 py-1">
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
+          <label class="block">Deadline</label>
+          <input id="task-deadline" type="datetime-local" class="w-full border rounded px-2 py-1" />
         </div>
         <div>
-          <div class="font-medium mb-1">Nhắc nhở</div>
-          <div class="flex gap-2 text-xs">
-            <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-app" checked /> App</label>
-            <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-email" /> Email</label>
-            <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-push" /> Push</label>
-          </div>
-        </div>
-        <button id="create-task" class="w-full bg-blue-600 text-white px-4 py-2 rounded">Tạo & Gợi ý slot</button>
-        <button id="save-task" class="w-full bg-green-600 text-white px-4 py-2 rounded hidden">Lưu task</button>
-
-        <div id="task-feedback" class="text-xs text-red-600"></div>
-        <div id="suggestion-box" class="mt-2 hidden p-3 border rounded bg-yellow-50">
-          <div class="font-medium mb-1">Gợi ý từ AI</div>
-          <div id="suggestion-content" class="text-sm"></div>
-          <button id="apply-suggestion" class="mt-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs">Chèn vào lịch</button>
+          <label class="block">Ưu tiên</label>
+          <select id="task-priority" class="w-full border rounded px-2 py-1">
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
         </div>
       </div>
+      <div>
+        <div class="font-medium mb-1">Nhắc nhở</div>
+        <div class="flex gap-2 text-xs">
+          <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-app" checked /> App</label>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-email" /> Email</label>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" id="notify-push" /> Push</label>
+        </div>
+      </div>
+      <button id="create-task" class="w-full bg-blue-600 text-white px-4 py-2 rounded">Tạo & Gợi ý slot</button>
+      <button id="save-task" class="w-full bg-green-600 text-white px-4 py-2 rounded hidden">Lưu task</button>
+
+      <div id="task-feedback" class="text-xs text-red-600"></div>
+      <div id="suggestion-box" class="mt-2 hidden p-3 border rounded bg-yellow-50">
+        <div class="font-medium mb-1">Gợi ý từ AI</div>
+        <div id="suggestion-content" class="text-sm"></div>
+        <button id="apply-suggestion" class="mt-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs">Chèn vào
+          lịch</button>
+      </div>
     </div>
-    
+  </div>
 
-    <!-- Toast container -->
-    <div id="toast-container" class="fixed bottom-4 right-4 flex flex-col gap-2 z-50"></div>
 
-    <script src="main.js"></script>
-  </body>
-  </html>
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 flex flex-col gap-2 z-50"></div>
+
+  <script src="main.js"></script>
+</body>
+
+</html>

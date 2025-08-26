@@ -5,7 +5,7 @@ import { getPool, sql } from "../db.js";
 /**
  * Lấy OAuth2 client đã set credentials cho user
  */
-async function getOAuth2Client(userUuid) {
+export async function getOAuth2Client(userUuid) {
   const pool = await getPool();
 
   const tokenResult = await pool.request()

@@ -244,7 +244,7 @@ function openEditEventPanel(event) {
   document.getElementById('event-title').value = event.title;
   document.getElementById('event-start').value = event.start_time.slice(0,16);
   document.getElementById('event-end').value = event.end_time.slice(0,16);
-  document.getElementById('event-link').value = event.link || '';
+  document.getElementById('event-link').value = event.meeting_link || '';
   document.getElementById('event-location').value = event.location || '';
   document.getElementById('event-description').value = event.description || '';
   document.getElementById('event-recurring').value = event.recurring_rule || 'none';
@@ -922,6 +922,150 @@ document.querySelectorAll('[data-day-offset]').forEach(dayCol => {
   });
 });
 
+async function refreshSuggestionBadge() {
+  if (!getJWT()) return;
+  const res = await fetch(`${API_PREFIX}/suggestions/count`, { headers: authHeaders() });
+  if (!res.ok) return;
+  const { count } = await res.json();
+  const badge = document.getElementById('suggest-badge');
+  if (count > 0) {
+    badge.textContent = count;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+// gọi khi login xong và set interval mỗi 10s
+setInterval(refreshSuggestionBadge, 5000);
+
+document.getElementById('open-suggestions').addEventListener('click', async ()=>{
+  if (!getJWT()) return showToast('Cần đăng nhập', 'error');
+  const p = document.getElementById('suggestions-panel');
+  p.classList.remove('hidden');
+  await loadSuggestions();
+});
+
+document.getElementById('close-suggestions').addEventListener('click', ()=>{
+  document.getElementById('suggestions-panel').classList.add('hidden');
+});
+
+function safeUrl(u) {
+  try {
+    if (!u) return null;
+    // loại bỏ ngoặc kép cong + khoảng trắng/ký tự rác cuối
+    const cleaned = String(u).trim().replace(/[“”]/g, '"').replace(/["'<>\s]+$/g, '');
+    const url = new URL(cleaned);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch {}
+  return null;
+}
+
+async function loadSuggestions() {
+  const res = await fetch(`${API_PREFIX}/suggestions`, { headers: authHeaders() });
+  const list = await res.json();
+  console.log('Loaded suggestions', list);
+
+  const container = document.getElementById('suggestions-list');
+  container.textContent = '';                       
+  const frag = document.createDocumentFragment();
+
+  list.forEach((s, i) => {
+    try {
+      console.log('Render suggestion', i, s);
+      console.log('Safe meeting link:', safeUrl(s.meeting_link));
+      const card = document.createElement('div');
+      card.className = 'border rounded p-3 space-y-2';
+
+      const title = document.createElement('div');
+      title.className = 'font-medium';
+      title.textContent = s.subject || '(Không tiêu đề)';
+      card.appendChild(title);
+
+      const time = document.createElement('div');
+      time.className = 'text-sm text-gray-600';
+      const startStr = s.start_time ? formatDateTimeLocal(s.start_time) : 'Chưa rõ thời gian';
+      const endStr = s.end_time ? ' — ' + formatDateTimeLocal(s.end_time) : '';
+      time.textContent = `${startStr}${endStr}`;
+      card.appendChild(time);
+
+      const meeting = safeUrl(s.meeting_link);
+      if (meeting) {
+        const a = document.createElement('a');
+        a.className = 'text-blue-600 underline text-sm';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.href = meeting;
+        a.textContent = 'Tham gia họp';
+        card.appendChild(a);
+      }
+
+      const snippet = document.createElement('div');
+      snippet.className = 'mt-2 text-sm text-gray-700 line-clamp-3';
+      snippet.textContent = s.snippet || '';
+      card.appendChild(snippet);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex gap-2 mt-2';
+
+      const btnAccept = document.createElement('button');
+      btnAccept.dataset.id = s.id;
+      btnAccept.dataset.act = 'accept';
+      btnAccept.className = 'px-2 py-1 bg-green-500 text-white rounded';
+      btnAccept.textContent = 'Chấp nhận';
+
+      const btnDismiss = document.createElement('button');
+      btnDismiss.dataset.id = s.id;
+      btnDismiss.dataset.act = 'dismiss';
+      btnDismiss.className = 'px-2 py-1 bg-gray-400 text-white rounded';
+      btnDismiss.textContent = 'Bỏ qua';
+
+      actions.append(btnAccept, btnDismiss);
+      card.appendChild(actions);
+
+      frag.appendChild(card);
+    } catch (err) {
+      console.error('Lỗi render suggestion', i, s, err);
+    }
+  });
+
+  container.appendChild(frag);
+
+  // Event delegation giữ nguyên
+  container.onclick = async (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const act = btn.dataset.act;
+    if (act === 'accept') {
+      const r = await fetch(`${API_PREFIX}/suggestions/${id}/accept`, { method:'POST', headers: authHeaders() });
+      if (r.ok) { showToast('Đã tạo sự kiện', 'success'); loadSuggestions(); refreshSuggestionBadge(); fetchWeekEvents(); }
+      else showToast('Tạo sự kiện thất bại', 'error');
+    } else if (act === 'dismiss') {
+      const r = await fetch(`${API_PREFIX}/suggestions/${id}/dismiss`, { method:'POST', headers: authHeaders() });
+      if (r.ok) { showToast('Đã bỏ qua', 'info'); loadSuggestions(); refreshSuggestionBadge(); }
+    } 
+  };
+}
+
+
+function formatDateTimeLocal(dt) {
+  if (!dt) return '';
+  if (typeof dt === 'number') return new Date(dt).toLocaleString('vi-VN');
+  const d = new Date(dt);
+  if (isNaN(d.getTime())) return dt;
+  return d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/[“”]/g, "&quot;");
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   renderHours();

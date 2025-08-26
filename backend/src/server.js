@@ -9,11 +9,13 @@ import eventsRoute from './routes/events.js';
 import authRoute from './routes/auth.js';
 import notificationsRoute from './routes/notifications.js';
 import googleSyncRoute from './routes/googleSync.js';
+import suggestionsRoute from './routes/suggestions.js';
 
 import { getPool, healthCheck } from './db.js';
 import { processPendingNotifications } from './jobs/retryNotifications.js';
 import { fetchAndSyncCalendar } from './services/calendarService.js';
 import { sendEmailReminder } from './services/gmailService.js';
+import { pollEmailsJob } from './jobs/pollEmails.js'; 
 
 dotenv.config();
 
@@ -30,6 +32,7 @@ app.use('/api/tasks', tasksRoute);
 app.use('/api/events', eventsRoute);
 app.use('/api/google', googleSyncRoute);
 app.use('/api/notifications', notificationsRoute);
+app.use('/api/suggestions', suggestionsRoute);
 
 app.get('/', (req, res) => res.send('Smart Schedule API running'));
 
@@ -67,6 +70,11 @@ function startJobs() {
       console.error('[Job] Calendar sync loop error:', e);
     }
   });
+
+  cron.schedule('*/1 * * * *', async () => {
+  console.log('[Job] Polling emails...');
+  try { await pollEmailsJob(); } catch (e) { console.error(e); }
+});
 
   // Mail  nhắc nhở trước 1 giờ
   cron.schedule('* * * * *', async () => {
