@@ -1,5 +1,6 @@
 //taskController.js
 import { getPool, sql } from '../db.js';
+import { classifyTaskAI } from '../services/aiService.js';
 //import { suggestTimeSlot } from '../services/suggestionService.js';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
@@ -30,6 +31,23 @@ export async function createTask(req, res) {
     } = req.body;
     const user_uuid = req.user.uuid;
 
+     let urgency = "not_urgent";
+    let importance = "not_important";
+
+    try {
+      const aiLabels = await classifyTaskAI({
+        title,
+        description,
+        deadline,
+        priority,
+      });
+
+      urgency = aiLabels.urgency || "not_urgent";
+      importance = aiLabels.importance || "not_important";
+    } catch (err) {
+      console.error("AI classify error:", err);
+    }
+
     const errors = validateTaskInput({ title, deadline, priority, status, notifications });
     if (errors.length) return res.status(400).json({ errors });
 
@@ -40,7 +58,7 @@ export async function createTask(req, res) {
     try{
       await transaction.begin();
     }
-    catch (err) {
+    catch (err) { 
       console.error('Transaction begin error:', err);
       return res.status(500).json({ error: 'Failed to start transaction' });
     }
@@ -69,6 +87,7 @@ export async function createTask(req, res) {
 
     // Tạo task
     const taskRequest = new sql.Request(transaction);
+    
     const insertTaskRes = await taskRequest
       .input('user_uuid', sql.UniqueIdentifier, user_uuid)
       .input('title', sql.NVarChar, title)
@@ -77,13 +96,15 @@ export async function createTask(req, res) {
       .input('priority', sql.NVarChar, priority)
       .input('estimated_duration', sql.Int, estimated_duration)
       .input('status', sql.NVarChar, status)
+      .input('urgency', sql.NVarChar, urgency)
+      .input('importance', sql.NVarChar, importance)
       //.input('assigned_event_id', sql.Int, assigned_event_id)
       .query(`
         INSERT INTO tasks
-          (user_uuid,title,description,deadline,priority,estimated_duration,status,created_at,updated_at)
+          (user_uuid,title,description,deadline,priority,estimated_duration,status,created_at,updated_at,urgency,importance)
         OUTPUT INSERTED.*
         VALUES
-          (@user_uuid,@title,@description,@deadline,@priority,@estimated_duration,@status,SYSUTCDATETIME(),SYSUTCDATETIME())
+          (@user_uuid,@title,@description,@deadline,@priority,@estimated_duration,@status,SYSUTCDATETIME(),SYSUTCDATETIME(),@urgency,@importance)
       `);
 
     const createdTask = insertTaskRes.recordset[0];
@@ -96,7 +117,7 @@ export async function createTask(req, res) {
     reminderTime.setHours(reminderTime.getHours() - 1);
 
     if (reminderTime > new Date()) {
-      await notifReq
+      await new sql.Request(transaction)
         .input('user_uuid', sql.UniqueIdentifier, user_uuid)
         .input('task_id', sql.Int, createdTask.id)
         .input('type', sql.NVarChar, 'reminder')
@@ -112,7 +133,7 @@ export async function createTask(req, res) {
     }
 
     // Overdue (đúng deadline)
-    await notifReq
+    await new sql.Request(transaction)
       .input('user_uuid', sql.UniqueIdentifier, user_uuid)
       .input('task_id', sql.Int, createdTask.id)
       .input('type', sql.NVarChar, 'overdue')

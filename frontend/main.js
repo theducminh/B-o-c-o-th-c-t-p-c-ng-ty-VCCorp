@@ -325,6 +325,10 @@ async function fetchTasks() {
             <div class="font-medium">${t.title}</div>
             <div class="text-[10px] text-gray-600">Deadline: ${new Date(t.deadline).toLocaleString()}</div>
             <div class="text-[10px] mt-1"><span class="px-2 py-0.5 bg-yellow-100 rounded">${t.priority}</span></div>
+            <div class="text-[9px] text-red-500 mt-0.5 italic">
+      ${t.urgency === 'urgent' ? 'Khẩn cấp' : 'Không khẩn cấp'} · 
+      ${t.importance === 'important' ? ' Quan trọng' : 'Không quan trọng'}
+    </div>
           </div>
           <div class="flex flex-col gap-1 text-xs">
             <button class="edit-task text-blue-600 underline" data-id="${t.id}">Sửa</button>
