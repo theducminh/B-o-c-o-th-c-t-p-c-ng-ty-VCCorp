@@ -1,10 +1,8 @@
-//services/suggestionService.js
-
+// services/suggestionService.js
 import { getPool, sql } from '../db.js';
-import { getFreeBusy } from './cacheService.js';
 
 /**
- * Gộp các khoảng busy chồng lấp nhau thành danh sách không chồng.
+ * Gộp các khoảng busy chồng lấp nhau thành danh sách không chồng
  */
 function mergeIntervals(intervals) {
   if (!Array.isArray(intervals)) return [];
@@ -12,6 +10,7 @@ function mergeIntervals(intervals) {
     .map(i => ({ start: new Date(i.start), end: new Date(i.end) }))
     .filter(i => i.start < i.end)
     .sort((a, b) => a.start - b.start);
+
   const merged = [];
   for (const cur of sorted) {
     if (merged.length === 0) {
@@ -19,7 +18,6 @@ function mergeIntervals(intervals) {
     } else {
       const last = merged[merged.length - 1];
       if (cur.start <= last.end) {
-        // overlap
         last.end = new Date(Math.max(last.end.getTime(), cur.end.getTime()));
       } else {
         merged.push(cur);
@@ -30,7 +28,7 @@ function mergeIntervals(intervals) {
 }
 
 /**
- * Làm tròn lên tới bước minutes (ví dụ 15) để slot bắt đầu đẹp hơn.
+ * Làm tròn lên tới bước minutes (mặc định 15 phút)
  */
 function roundUp(date, minutes = 15) {
   const ms = 1000 * 60 * minutes;
@@ -38,56 +36,71 @@ function roundUp(date, minutes = 15) {
 }
 
 /**
- * Trả về một slot rảnh có độ dài durationMinutes, trước deadline (nếu có).
+ * Gợi ý slot rảnh từ DB (tasks + events)
  * @param {string} user_uuid
  * @param {number} durationMinutes
- * @param {Date} [deadline] nếu không cung cấp thì giới hạn trong 7 ngày từ now
+ * @param {number} maxWindowDays
  */
-export async function suggestTimeSlot(user_uuid, durationMinutes, deadline = null) {
+export async function suggestTimeSlotFromDB(user_uuid, durationMinutes = 60, maxWindowDays = 7) {
+  const pool = await getPool();
   const now = new Date();
-  const windowEnd = deadline
-    ? new Date(Math.min(new Date(now).setDate(now.getDate() + 7), new Date(deadline).getTime()))
-    : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
+  const windowEnd = new Date(now.getTime() + maxWindowDays * 24 * 60 * 60 * 1000);
   const durationMs = durationMinutes * 60 * 1000;
 
-  // Lấy busy và merge để chắc chắn không chồng
-  const busyRaw = await getFreeBusy(user_uuid, now.toISOString(), windowEnd.toISOString());
-  const busyIntervals = mergeIntervals(busyRaw);
+  // Lấy tất cả events
+  const eventsRes = await pool.request()
+    .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+    .input('windowEnd', sql.DateTime2, windowEnd)
+    .query(`
+      SELECT start_time, end_time FROM events
+      WHERE user_uuid = @user_uuid
+        AND start_time < @windowEnd
+        AND end_time > GETUTCDATE()
+    `);
 
-  // Bắt đầu từ now làm tròn lên (ví dụ 15 phút)
+  // Lấy tất cả tasks còn pending
+  const tasksRes = await pool.request()
+    .input('user_uuid', sql.UniqueIdentifier, user_uuid)
+    .input('windowEnd', sql.DateTime2, windowEnd)
+    .query(`
+      SELECT deadline, estimated_duration FROM tasks
+      WHERE user_uuid = @user_uuid
+        AND status = 'todo'
+        AND deadline > GETUTCDATE()
+        AND deadline < @windowEnd
+    `);
+
+  // Chuyển tasks thành intervals
+  const taskIntervals = tasksRes.recordset.map(t => ({
+    start: new Date(t.deadline.getTime() - t.estimated_duration * 60 * 1000),
+    end: new Date(t.deadline.getTime())
+  }));
+
+  const allBusy = [
+    ...eventsRes.recordset.map(e => ({ start: e.start_time, end: e.end_time })),
+    ...taskIntervals
+  ];
+
+  const busyIntervals = mergeIntervals(allBusy);
+
+  // Tìm các slot rảnh
+  const suggestedSlots = [];
   let cursor = roundUp(now, 15);
 
-  // Nếu có deadline nhỏ hơn cursor thì không có slot
-  if (deadline && cursor.getTime() + durationMs > new Date(deadline).getTime()) {
-    return null;
-  }
-
   for (const interval of busyIntervals) {
-    // Nếu slot hiện tại (cursor) + duration trước khi busy bắt đầu
     if (interval.start.getTime() - cursor.getTime() >= durationMs) {
-      // đảm bảo trước deadline
-      const endCandidate = new Date(cursor.getTime() + durationMs);
-      if (deadline && endCandidate.getTime() > new Date(deadline).getTime()) break;
-      return { start: cursor.toISOString(), end: endCandidate.toISOString() };
+      suggestedSlots.push({ start: cursor.toISOString(), end: new Date(cursor.getTime() + durationMs).toISOString() });
     }
-    // di chuyển cursor sau busy nếu nó nằm trong hoặc trước interval
     if (interval.end > cursor) {
       cursor = roundUp(interval.end, 15);
     }
-    // check deadline again
-    if (deadline && cursor.getTime() + durationMs > new Date(deadline).getTime()) {
-      break;
-    }
   }
 
-  // Cuối cùng: xem còn slot sau busy cuối cùng đến windowEnd / deadline không
-  if (cursor.getTime() + durationMs <= windowEnd.getTime()) {
-    const endCandidate = new Date(cursor.getTime() + durationMs);
-    if (!deadline || endCandidate.getTime() <= new Date(deadline).getTime()) {
-      return { start: cursor.toISOString(), end: endCandidate.toISOString() };
-    }
+  // Cuối cùng: sau busy cuối cùng
+  while (cursor.getTime() + durationMs <= windowEnd.getTime()) {
+    suggestedSlots.push({ start: cursor.toISOString(), end: new Date(cursor.getTime() + durationMs).toISOString() });
+    cursor = new Date(cursor.getTime() + durationMs); // step tiếp theo
   }
 
-  return null;
+  return suggestedSlots.slice(0, 5); // trả tối đa 5 gợi ý
 }

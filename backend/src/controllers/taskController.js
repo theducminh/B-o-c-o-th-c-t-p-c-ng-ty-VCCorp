@@ -1,7 +1,7 @@
 //taskController.js
 import { getPool, sql } from '../db.js';
 import { classifyTaskAI } from '../services/aiService.js';
-//import { suggestTimeSlot } from '../services/suggestionService.js';
+import { suggestTimeSlotFromDB } from '../services/suggestionService.js';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const VALID_STATUSES = ['todo', 'done'];
@@ -51,10 +51,6 @@ export async function createTask(req, res) {
     const errors = validateTaskInput({ title, deadline, priority, status, notifications });
     if (errors.length) return res.status(400).json({ errors });
 
-    // Gợi ý slot trước deadline
-    //const suggestion = await suggestTimeSlot(user_uuid, estimated_duration, new Date(deadline));
-   // let assigned_event_id = null;
-
     try{
       await transaction.begin();
     }
@@ -63,27 +59,7 @@ export async function createTask(req, res) {
       return res.status(500).json({ error: 'Failed to start transaction' });
     }
 
-    /*if (suggestion) {
-      const eventRequest = new sql.Request(transaction);
-      const insertEvtRes = await eventRequest
-        .input('user_uuid', sql.UniqueIdentifier, user_uuid)
-        .input('title', sql.NVarChar, `Suggested: ${title}`)
-        .input('description', sql.NVarChar, '')
-        .input('start_time', sql.DateTime2, suggestion.start)
-        .input('end_time', sql.DateTime2, suggestion.end)
-        .input('recurring_rule', sql.NVarChar, null)
-        .input('location', sql.NVarChar, '')
-        .input('meeting_link', sql.NVarChar, '')
-        .input('source', sql.NVarChar, 'suggested_task')
-        .query(`
-          INSERT INTO events 
-            (user_uuid,title,description,start_time,end_time,recurring_rule,location,meeting_link,source,created_at,updated_at)
-          OUTPUT INSERTED.id
-          VALUES 
-            (@user_uuid,@title,@description,@start_time,@end_time,@recurring_rule,@location,@meeting_link,@source,SYSUTCDATETIME(),SYSUTCDATETIME())
-        `);
-      assigned_event_id = insertEvtRes.recordset[0].id;
-    }*/
+    
 
     // Tạo task
     const taskRequest = new sql.Request(transaction);
@@ -496,3 +472,19 @@ export async function updateTaskStatus(req, res) {
   }
 }
 
+export async function suggestTaskDeadline(req, res) {
+  try {
+    const user_uuid = req.user.uuid;
+    let estimated_duration = parseInt(req.query.estimated_duration, 10);
+    let max_window_days = parseInt(req.query.max_window_days, 10);
+
+    if (isNaN(estimated_duration) || estimated_duration <= 0) estimated_duration = 60;
+    if (isNaN(max_window_days) || max_window_days <= 0) max_window_days = 7;
+
+    const slots = await suggestTimeSlotFromDB(user_uuid, estimated_duration, max_window_days);
+    res.json({ suggested_slots: slots || [] });
+  } catch (err) {
+    console.error('suggestTaskDeadline error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+}

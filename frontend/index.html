@@ -29,7 +29,7 @@
   </style>
 </head>
 
-<body class="bg-[#f1f3f4] font-sans min-h-screen flex flex-col">
+<body class="bg-[#f1f3f4] font-sans h-screen flex flex-col">
   <!-- Top bar -->
   <div class="flex items-center justify-between px-4 py-2 bg-white shadow-sm">
     <div class="flex items-center gap-4">
@@ -72,7 +72,7 @@
 
   </div>
 
-  <div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-1 overflow-hidden h-full">
     <!-- Sidebar -->
     <div class="w-80 bg-white border-r flex flex-col">
       <div class="p-4 border-b flex justify-between items-center">
@@ -101,7 +101,7 @@
         </div>
         <button id="apply-filters" class="w-full bg-green-500 text-white text-xs px-3 py-1 rounded">Áp dụng</button>
       </div>
-      <div class="p-4 flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto p-4">
         <div id="task-list" class="space-y-2 text-sm">
           <!-- task items -->
         </div>
@@ -110,19 +110,6 @@
         <button id="openHistoryBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg shadow">
           Lịch sử thông báo
         </button>
-
-        <!-- Modal -->
-        <div id="historyModal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
-          <div class="bg-white rounded-2xl shadow-xl w-96 max-h-[80vh] overflow-y-auto">
-            <div class="flex justify-between items-center p-4 border-b">
-              <h2 class="text-lg font-semibold">Lịch sử thông báo</h2>
-              <button id="closeHistoryBtn" class="text-gray-500 hover:text-gray-700">✖</button>
-            </div>
-            <div id="historyList" class="p-4 space-y-3">
-              <!-- Thông báo sẽ render vào đây -->
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -255,10 +242,12 @@
           placeholder="Mô tả công việc"></textarea>
       </div>
       <div class="grid grid-cols-2 gap-2">
-        <div>
-          <label class="block">Deadline</label>
-          <input id="task-deadline" type="datetime-local" class="w-full border rounded px-2 py-1" />
-        </div>
+         <div class="relative">
+    <label class="block">Deadline</label>
+    <input id="task-deadline" type="datetime-local" class="w-full border rounded px-2 py-1" />
+    <button id="suggest-deadline" class="absolute right-1 top-1/2 -translate-y-1/2 bg-blue-500 text-white px-2 py-0.5 rounded text-xs hover:bg-blue-600">Gợi ý</button>
+    <div id="suggested-slots" class="absolute left-0 mt-1 w-full bg-white border rounded shadow max-h-40 overflow-y-auto hidden z-50"></div>
+  </div>
         <div>
           <label class="block">Ưu tiên</label>
           <select id="task-priority" class="w-full border rounded px-2 py-1">
@@ -289,6 +278,8 @@
       </div>
     </div>
   </div>
+
+  
 
 
   <!-- Toast container -->

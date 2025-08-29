@@ -1071,6 +1071,58 @@ function escapeHtml(str) {
     .replace(/[“”]/g, "&quot;");
 }
 
+const suggestBtn = document.getElementById('suggest-deadline');
+const deadlineInput = document.getElementById('task-deadline');
+const suggestedContainer = document.getElementById('suggested-slots');
+
+suggestBtn.addEventListener('click', async () => {
+  suggestedContainer.innerHTML = '';
+  suggestedContainer.classList.remove('hidden');
+
+  const estimatedDuration = parseInt(document.getElementById('task-estimated-duration')?.value || 60);
+
+  try {
+    const res = await fetch(`${API_PREFIX}/tasks/suggest-deadline?estimated_duration=${estimatedDuration}`, {
+  headers: authHeaders()
+});
+
+    const data = await res.json();
+    const slots = data.suggested_slots || [];
+
+    if (slots.length === 0) {
+      suggestedContainer.innerHTML = '<div class="p-2 text-gray-500">Không tìm thấy slot rảnh phù hợp</div>';
+      return;
+    }
+
+    slots.forEach(slot => {
+      const start = new Date(slot.start);
+      const end = new Date(slot.end);
+      const div = document.createElement('div');
+      div.className = 'px-2 py-1 hover:bg-gray-100 cursor-pointer text-sm';
+      div.textContent = `${start.toLocaleString()} - ${end.toLocaleTimeString()}`;
+      div.addEventListener('click', () => {
+        // Điền deadline = end của slot
+        deadlineInput.value = end.toISOString().slice(0,16);
+        suggestedContainer.classList.add('hidden');
+      });
+      suggestedContainer.appendChild(div);
+    });
+  } catch (err) {
+    console.error(err);
+    suggestedContainer.innerHTML = '<div class="p-2 text-red-500">Lỗi khi lấy gợi ý</div>';
+  }
+});
+
+// Ẩn dropdown khi click ra ngoài
+document.addEventListener('click', (e) => {
+  if (!suggestedContainer.contains(e.target) && e.target !== suggestBtn) {
+    suggestedContainer.classList.add('hidden');
+  }
+});
+
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
   renderHours();
   updateWeekLabel();
